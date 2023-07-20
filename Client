@@ -1,0 +1,195 @@
+#include <iostream>
+#include <Winsock2.h>
+#include <ws2tcpip.h>
+#include <tchar.h>
+#include <stdlib.h>
+#include <sstream>
+
+using namespace std;
+
+// Check if buffer recieved gameover condition
+int gameOver(char *buffer, SOCKET clientSocket)
+{
+    // If a player wins
+    if((*buffer == '1') || (*buffer == '2'))
+    {
+        cout << "Game over! Player " << buffer << " has won!\n";
+
+        // Disconnect
+        closesocket(clientSocket); //close the socket
+        WSACleanup(); //terminates the use of winsock
+        return 1;
+    }
+    // If ends in a draw
+    else if(*buffer == '3')
+    {
+        cout << "Game over! Draw!\n";
+
+        // Disconnect
+        closesocket(clientSocket); //close the socket
+        WSACleanup(); //terminates the use of winsock
+        return 1;
+    }
+
+    // Condition not met
+    return 0;
+}
+
+int main()
+{
+    //step 1 initialize WSA
+    SOCKET clientSocket;
+    int port = 55555; //chosen unused port
+    WSADATA wsaData; // includes details on the windows sockets implementation. gets populated from WSAStartup
+    int wsaerr;
+    WORD wVersionRequested = MAKEWORD(2, 2); //This is just what version of winsock we are using. Version 2.2
+    wsaerr = WSAStartup(wVersionRequested, &wsaData); //WSAStartup allows connection to the internet through TCP
+    if (wsaerr != 0) { //check to see if winsock is running
+        cout << "the The Winsock not found!" << endl;
+        return 0;
+    }
+    else {
+        cout << "The Winsock found!" << endl;
+        cout << "The status: " << wsaData.szSystemStatus << endl; //says if running or not
+    }
+
+    //step 2 create sockets
+    clientSocket = INVALID_SOCKET;
+    clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); //creats socket based on the parameters
+    //Af_INET say we will choose between TCP or UDP
+    //SOCK_STREAM selects TCP
+    //IPPROTO_TCP is a constant we need to pass for TCP
+    if (clientSocket == INVALID_SOCKET) { //checks if the socket was created
+        cout << "Error at socket(): " << WSAGetLastError() << endl;
+        WSACleanup(); //terminates the use of winsock. Frees up DLL so other applications can use it
+        return 0;
+    }
+    else {
+        cout << "socket() is OK!" << endl;
+    }
+
+    //step 3 connect
+    //Don't need a bind statement b/c it is called with the connect()
+    sockaddr_in clientService; //sockaddr_in is used to specify a local or remote endpoint address to connect a socket
+    clientService.sin_family = AF_INET; //As before Af_INET says we will choose between TCP or UDP
+    //"127.0.0.1" IP to run on same computer
+    //Change 127.0.0.1 IP to the IP of the server 
+    InetPton(AF_INET, _T("127.0.0.1"), &clientService.sin_addr.s_addr);
+    clientService.sin_port = htons(port); //IP port. htons makes sure the value is in TCP network byte order
+    
+    //connect will wait 75 sec for the server to respond
+    //for the connect function
+    //1st parameter is the socket you want to bind
+    //2nd parameter is the IP address
+    //3rd parameter is the length of the address
+    if (connect(clientSocket, (SOCKADDR*)&clientService, sizeof(clientService)) == SOCKET_ERROR) {
+        cout << "Connection failed; " << WSAGetLastError() << endl;
+        closesocket(clientSocket); //close the socket
+        WSACleanup();  //terminates the use of winsock
+        return 0;
+    }
+    else {
+        cout << "Client connected" << endl;
+        cout << "Client can start to send and receive data" << endl;
+    }
+
+    //step 4 send and receive data
+    char buffer[200];
+    char input[200];
+    //receive name of game
+    int byteCount = recv(clientSocket, buffer, 200, 0);
+    if (byteCount == SOCKET_ERROR) {
+        printf("Server sent error %ld.\n", WSAGetLastError());
+        return -1;
+    }
+    else {
+        cout << "Name of game: " << buffer << endl; //displays the name of the game
+    }
+
+    //Displays who player X is and who player O is 
+    //also displays the starting board
+    byteCount = recv(clientSocket, buffer, 200, 0);
+    if (byteCount == SOCKET_ERROR) {
+        printf("Server sent error %ld.\n", WSAGetLastError());
+        return -1;
+    }
+    else {
+        cout << "Starting Board: " << buffer << endl;
+    }
+
+    for (auto i = 0; i < 15; i++) {
+        // Recieve first buffer information
+        byteCount = recv(clientSocket, buffer, 200, 0);
+
+        // Check gameover condition
+        if(gameOver(buffer, clientSocket) == 1)
+        {
+            return 0;
+        }
+        
+        //Displays whose turn it is 
+        if (byteCount == SOCKET_ERROR) {
+            printf("Server sent eror what %ld.\n", WSAGetLastError());
+            return -1;
+        }
+        else
+        {
+            cout << "turn: " << buffer << endl;
+        }
+
+        //gets where player wants to make their move
+        cout << "Enter your move" << endl;
+
+
+        cin.getline(input, 200);
+
+        byteCount = send(clientSocket, input, 200, 0); //sends where their move is
+        if (byteCount == SOCKET_ERROR) {
+            printf("Server sent error %ld.\n", WSAGetLastError());
+            return -1;
+        }
+        else {
+            cout << "Space selected: " << input << endl;
+        }
+
+        byteCount = recv(clientSocket, buffer, 200, 0);
+
+        // Check gameover condition
+        if(gameOver(buffer, clientSocket) == 1)
+        {
+            return 0;
+        }
+        if (byteCount == SOCKET_ERROR) {
+            printf("Server sent eror %ld.\n", WSAGetLastError());
+            return -1;
+        }
+        else
+        {
+            cout << "turn: " << buffer << endl;
+        }
+
+        //Displays whose turn it is 
+        byteCount = recv(clientSocket, buffer, 200, 0);
+
+        // Check gameover condition
+        if(gameOver(buffer, clientSocket) == 1)
+        {
+            return 0;
+        }
+
+        if (byteCount == SOCKET_ERROR) {
+            printf("Server sent eror what %ld.\n", WSAGetLastError());
+            return -1;
+        }
+        else
+        {
+            cout << "turn: " << buffer << endl;
+        }
+    }
+
+    //step 5 disconnect
+    // system("pause");
+    closesocket(clientSocket); //close the socket
+    WSACleanup(); //terminates the use of winsock
+    return 0;
+}
